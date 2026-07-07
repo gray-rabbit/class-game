@@ -1,0 +1,9 @@
+@import 'tailwindcss';
+
+:global(html) {
+	scroll-behavior: smooth;
+}
+
+:global(*) {
+	box-sizing: border-box;
+}
