@@ -3,6 +3,9 @@
 
 	type Props = {
 		target: number;
+		targetRange?: [number, number] | null;
+		maxPart?: number;
+		buttonMax?: number;
 		title?: string;
 		runToken?: string | null;
 		gameName?: string;
@@ -13,6 +16,9 @@
 
 	let {
 		target,
+		targetRange = null,
+		maxPart,
+		buttonMax,
 		title,
 		runToken = null,
 		gameName,
@@ -23,8 +29,10 @@
 
 	const displayTitle = $derived(title ?? `${target} 만들기`);
 	const resolvedGameName = $derived(gameName ?? `make-${target}`);
+	const resolvedMaxPart = $derived(maxPart ?? target);
+	const resolvedButtonMax = $derived(buttonMax ?? target);
 	const GAME_DURATION = 60;
-	const buttons = $derived(Array.from({ length: target + 1 }, (_, i) => i));
+	const buttons = $derived(Array.from({ length: resolvedButtonMax + 1 }, (_, i) => i));
 
 	type ProblemType = 'pair-top' | 'pair-bottom';
 	type Problem = {
@@ -32,6 +40,7 @@
 		blankIndex: 0 | 1;
 		given: number;
 		answer: number;
+		target: number;
 	};
 
 	type ConfettiPiece = {
@@ -140,11 +149,18 @@
 
 	const generateProblem = (): Problem => {
 		const type: ProblemType = Math.random() < 0.5 ? 'pair-top' : 'pair-bottom';
-		// given 은 1..target-1, answer = target - given (둘 다 0이 되지 않도록)
-		const given = 1 + Math.floor(Math.random() * (target - 1));
-		const answer = target - given;
+		// targetRange 가 있으면 매 문제마다 랜덤 target, 없으면 고정 target
+		const currentTarget = targetRange
+			? targetRange[0] + Math.floor(Math.random() * (targetRange[1] - targetRange[0] + 1))
+			: target;
+		// given 은 1..maxPart, answer = currentTarget - given
+		// 두 수 모두 0이 되지 않고 maxPart 를 넘지 않도록 범위 제한
+		const minGiven = Math.max(1, currentTarget - resolvedMaxPart);
+		const maxGiven = Math.min(resolvedMaxPart, currentTarget - 1);
+		const given = minGiven + Math.floor(Math.random() * (maxGiven - minGiven + 1));
+		const answer = currentTarget - given;
 		const blankIndex: 0 | 1 = Math.random() < 0.5 ? 0 : 1;
-		return { type, blankIndex, given, answer };
+		return { type, blankIndex, given, answer, target: currentTarget };
 	};
 
 	const generateConfetti = (): ConfettiPiece[] => {
@@ -273,7 +289,8 @@
 			<h3 class="idle-title">{displayTitle}</h3>
 			{#if standalone}
 				<p class="idle-desc">
-					두 수를 더해 {target}을(를) 만드는 게임이에요.<br />60초 동안 많이 맞춰보세요!
+					두 수를 더해 {targetRange ? `${target} 이하를` : `${target}을(를)`} 만드는 게임이에요.
+					<br />60초 동안 많이 맞춰보세요!
 				</p>
 				<button type="button" class="start-btn" onclick={beginGame}>게임 시작</button>
 			{:else}
@@ -294,27 +311,75 @@
 
 			{#key problem}
 				<div class="problem-board problem-enter">
+					<!-- 화살표 오버레이: 위쪽 상자들에서 아래쪽 상자들로 향하는 화살표 2개 -->
+					<svg class="arrows-overlay" aria-hidden="true">
+						<defs>
+							<marker
+								id="arrowhead"
+								markerWidth="5"
+								markerHeight="5"
+								refX="2.5"
+								refY="2.5"
+								orient="auto"
+							>
+								<path d="M0,0 L5,2.5 L0,5 Z" fill="rgba(255,255,255,0.85)" />
+							</marker>
+						</defs>
+						{#if problem.type === 'pair-top'}
+							<!-- 위 2개 -> 아래 1개 -->
+							<line
+								x1="28%"
+								y1="26%"
+								x2="50%"
+								y2="70%"
+								class="arrow-line"
+								marker-end="url(#arrowhead)"
+							/>
+							<line
+								x1="72%"
+								y1="26%"
+								x2="50%"
+								y2="70%"
+								class="arrow-line"
+								marker-end="url(#arrowhead)"
+							/>
+						{:else}
+							<!-- 위 1개 -> 아래 2개 -->
+							<line
+								x1="50%"
+								y1="26%"
+								x2="28%"
+								y2="70%"
+								class="arrow-line"
+								marker-end="url(#arrowhead)"
+							/>
+							<line
+								x1="50%"
+								y1="26%"
+								x2="72%"
+								y2="70%"
+								class="arrow-line"
+								marker-end="url(#arrowhead)"
+							/>
+						{/if}
+					</svg>
+
+					<!-- 상자들 -->
 					{#if problem.type === 'pair-top'}
-						<div class="pair-row">
-							<div class="num-box" class:blank={problem.blankIndex === 0}>
-								{problem.blankIndex === 0 ? '?' : problem.given}
-							</div>
-							<div class="num-box" class:blank={problem.blankIndex === 1}>
-								{problem.blankIndex === 1 ? '?' : problem.given}
-							</div>
+						<div class="num-box pos-top-left" class:blank={problem.blankIndex === 0}>
+							{problem.blankIndex === 0 ? '?' : problem.given}
 						</div>
-						<div class="plus-mark">+</div>
-						<div class="target-box">{target}</div>
+						<div class="num-box pos-top-right" class:blank={problem.blankIndex === 1}>
+							{problem.blankIndex === 1 ? '?' : problem.given}
+						</div>
+						<div class="target-box pos-bottom-center">{problem.target}</div>
 					{:else}
-						<div class="target-box">{target}</div>
-						<div class="plus-mark">+</div>
-						<div class="pair-row">
-							<div class="num-box" class:blank={problem.blankIndex === 0}>
-								{problem.blankIndex === 0 ? '?' : problem.given}
-							</div>
-							<div class="num-box" class:blank={problem.blankIndex === 1}>
-								{problem.blankIndex === 1 ? '?' : problem.given}
-							</div>
+						<div class="target-box pos-top-center">{problem.target}</div>
+						<div class="num-box pos-bottom-left" class:blank={problem.blankIndex === 0}>
+							{problem.blankIndex === 0 ? '?' : problem.given}
+						</div>
+						<div class="num-box pos-bottom-right" class:blank={problem.blankIndex === 1}>
+							{problem.blankIndex === 1 ? '?' : problem.given}
 						</div>
 					{/if}
 				</div>
@@ -333,7 +398,7 @@
 
 		<div
 			class="number-pad"
-			style={`grid-template-columns: repeat(${Math.min(target + 1, 10)}, 1fr);`}
+			style={`grid-template-columns: repeat(${Math.min(resolvedButtonMax + 1, 10)}, 1fr);`}
 		>
 			{#each buttons as number (number)}
 				<button type="button" class="num-btn" onclick={() => handleAnswer(number)}>
@@ -341,7 +406,9 @@
 				</button>
 			{/each}
 		</div>
-		<p class="game-footer">두 수를 더해 {target}을(를) 만들어요. 빈칸의 숫자를 골라보세요!</p>
+		<p class="game-footer">
+			두 수를 더해 {problem.target}을(를) 만들어요. 빈칸의 숫자를 골라보세요!
+		</p>
 	{:else if phase === 'finished'}
 		<div class="result-screen">
 			{#each confettiPieces as piece (piece.id)}
@@ -593,11 +660,11 @@
 		}
 	}
 
+	/* ===== Problem board ===== */
 	.problem-board {
-		display: flex;
-		flex-direction: column;
-		align-items: center;
-		gap: 0.65rem;
+		position: relative;
+		width: min(20rem, 100%);
+		height: 13rem;
 	}
 
 	.problem-enter {
@@ -615,20 +682,36 @@
 		}
 	}
 
-	.pair-row {
-		display: flex;
-		gap: 0.9rem;
-		justify-content: center;
+	.arrows-overlay {
+		position: absolute;
+		inset: 0;
+		width: 100%;
+		height: 100%;
+		overflow: visible;
+		z-index: 1;
 	}
 
+	.arrow-line {
+		stroke: rgba(255, 255, 255, 0.8);
+		stroke-width: 3;
+		stroke-linecap: round;
+	}
+
+	.num-box,
 	.target-box {
-		width: 7rem;
-		height: 5.2rem;
+		position: absolute;
+		transform: translate(-50%, -50%);
 		display: grid;
 		place-items: center;
 		border-radius: 22px;
 		font-size: 2.6rem;
 		font-weight: 900;
+		z-index: 2;
+	}
+
+	.target-box {
+		width: 7rem;
+		height: 5.2rem;
 		color: #4a2b00;
 		background: linear-gradient(135deg, #ffd93d, #ffb84d);
 		box-shadow:
@@ -639,11 +722,6 @@
 	.num-box {
 		width: 6.2rem;
 		height: 5.2rem;
-		display: grid;
-		place-items: center;
-		border-radius: 22px;
-		font-size: 2.6rem;
-		font-weight: 900;
 		color: #071a35;
 		background: linear-gradient(135deg, #8ec5ff, #7bffb6);
 		box-shadow:
@@ -675,11 +753,30 @@
 		}
 	}
 
-	.plus-mark {
-		font-size: 1.8rem;
-		font-weight: 900;
-		color: rgba(255, 255, 255, 0.85);
-		line-height: 1;
+	/* 상자 위치 클래스 (problem-board 내 퍼센트 좌표) */
+	.pos-top-left {
+		left: 28%;
+		top: 22%;
+	}
+	.pos-top-right {
+		left: 72%;
+		top: 22%;
+	}
+	.pos-top-center {
+		left: 50%;
+		top: 22%;
+	}
+	.pos-bottom-left {
+		left: 28%;
+		top: 78%;
+	}
+	.pos-bottom-right {
+		left: 72%;
+		top: 78%;
+	}
+	.pos-bottom-center {
+		left: 50%;
+		top: 78%;
 	}
 
 	.scoreline {
@@ -945,6 +1042,10 @@
 			width: 5rem;
 			height: 4.4rem;
 			font-size: 2.1rem;
+		}
+
+		.problem-board {
+			height: 11rem;
 		}
 
 		.num-btn {

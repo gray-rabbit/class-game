@@ -23,7 +23,6 @@
 		latestGameName: string;
 		latestScore: number | null;
 		latestSentAt: string;
-		items: StudentScorePayload[];
 	};
 
 	type TeacherRoom = {
@@ -70,35 +69,41 @@
 	};
 
 	const getVisibleStudents = () => {
-		const sortedStudents = [...students].sort((firstStudent, secondStudent) => {
-			return sortOrder === 'asc'
-				? firstStudent.studentNumber - secondStudent.studentNumber
-				: secondStudent.studentNumber - firstStudent.studentNumber;
-		});
+		// 1. 필터 적용 (점수 기준)
+		let filtered = students;
 
 		if (filterMode === 'range') {
 			const start = parseOptionalNumber(rangeStart);
 			const end = parseOptionalNumber(rangeEnd);
 
-			return sortedStudents.filter((student) => {
-				return (
-					(start === null || student.studentNumber >= start) &&
-					(end === null || student.studentNumber <= end)
-				);
+			filtered = students.filter((student) => {
+				const score = student.latestScore;
+				if (score === null) return false;
+				return (start === null || score >= start) && (end === null || score <= end);
 			});
-		}
-
-		if (filterMode === 'equal') {
+		} else if (filterMode === 'equal') {
 			const target = parseOptionalNumber(equalNumber);
 
-			if (target === null) {
-				return sortedStudents;
+			if (target !== null) {
+				filtered = students.filter((student) => student.latestScore === target);
 			}
-
-			return sortedStudents.filter((student) => student.studentNumber === target);
 		}
 
-		return sortedStudents;
+		// 2. 점수 있는 학생은 점수 기준 정렬, 점수 없는 학생은 번호순 정렬해 뒤에 배치
+		const scored = filtered.filter((student) => student.latestScore !== null);
+		const unscored = filtered.filter((student) => student.latestScore === null);
+
+		const sortedScored = [...scored].sort((firstStudent, secondStudent) => {
+			return sortOrder === 'asc'
+				? (firstStudent.latestScore ?? 0) - (secondStudent.latestScore ?? 0)
+				: (secondStudent.latestScore ?? 0) - (firstStudent.latestScore ?? 0);
+		});
+
+		const sortedUnscored = [...unscored].sort(
+			(firstStudent, secondStudent) => firstStudent.studentNumber - secondStudent.studentNumber
+		);
+
+		return [...sortedScored, ...sortedUnscored];
 	};
 
 	const visibleStudentsCount = () => getVisibleStudents().length;
@@ -137,8 +142,7 @@
 					preparedGameName: '',
 					latestGameName: '',
 					latestScore: null,
-					latestSentAt: '',
-					items: []
+					latestSentAt: ''
 				};
 			});
 
@@ -194,8 +198,7 @@
 						latestGameName: payload.gameName,
 						latestScore: payload.score,
 						latestSentAt: payload.sentAt,
-						gameState: 'finished',
-						items: [payload, ...current.items].slice(0, 5)
+						gameState: 'finished'
 					}));
 					status = `${student.room} 에서 점수가 들어왔습니다.`;
 				};
@@ -236,7 +239,10 @@
 			...student,
 			preparedGameName: normalizedGameName,
 			latestGameName: normalizedGameName,
-			gameState: 'prepared'
+			gameState: 'prepared',
+			// 새 게임 준비 시 이전 점수 초기화 (현재 게임 점수만 표시)
+			latestScore: null,
+			latestSentAt: ''
 		}));
 		status = `${normalizedGameName} 게임 준비 신호를 전송했습니다.`;
 	};
@@ -264,7 +270,10 @@
 			...student,
 			preparedGameName: normalizedGameName,
 			latestGameName: normalizedGameName,
-			gameState: 'running'
+			gameState: 'running',
+			// 새 게임 시작 시 이전 점수 초기화 (현재 게임 점수만 표시)
+			latestScore: null,
+			latestSentAt: ''
 		}));
 		status = `${normalizedGameName} 게임 시작 신호를 전송했습니다.`;
 	};
@@ -351,7 +360,7 @@
 			<div class="filter-title">학생 칸 정리</div>
 			<div class="filter-grid">
 				<label>
-					<span>정렬</span>
+					<span>점수 정렬</span>
 					<select bind:value={sortOrder}>
 						<option value="asc">오름차순</option>
 						<option value="desc">내림차순</option>
@@ -362,35 +371,35 @@
 					<span>필터</span>
 					<select bind:value={filterMode}>
 						<option value="all">전체</option>
-						<option value="range">숫자 범위</option>
-						<option value="equal">특정 숫자</option>
+						<option value="range">점수 범위</option>
+						<option value="equal">특정 점수</option>
 					</select>
 				</label>
 
 				{#if filterMode === 'range'}
 					<label>
-						<span>이상</span>
+						<span>점수 이상</span>
 						<input
 							value={rangeStart}
 							oninput={(event) =>
 								(rangeStart = (event.currentTarget as HTMLInputElement).value.replace(/\D/g, ''))}
 							inputmode="numeric"
-							placeholder="예: 3"
+							placeholder="예: 5"
 						/>
 					</label>
 					<label>
-						<span>이하</span>
+						<span>점수 이하</span>
 						<input
 							value={rangeEnd}
 							oninput={(event) =>
 								(rangeEnd = (event.currentTarget as HTMLInputElement).value.replace(/\D/g, ''))}
 							inputmode="numeric"
-							placeholder="예: 7"
+							placeholder="예: 20"
 						/>
 					</label>
 				{:else if filterMode === 'equal'}
 					<label class="wide-filter">
-						<span>같은 숫자</span>
+						<span>같은 점수</span>
 						<input
 							value={equalNumber}
 							oninput={(event) =>
@@ -419,7 +428,9 @@
 					>
 						<div class="card-head">
 							<strong>{student.room}</strong>
-							<span>{student.isConnected ? '연결됨' : '미연결'}</span>
+							<span class="status-chip" class:on={student.isConnected}>
+								{student.isConnected ? '● 연결됨' : '○ 미연결'}
+							</span>
 						</div>
 						<div class="card-meta">학생 {student.studentNumber}</div>
 						<div class="card-meta">게임 상태: {student.gameState}</div>
@@ -430,20 +441,12 @@
 							{#if student.latestScore !== null}
 								<p class="score">점수 {student.latestScore}</p>
 								<small>{student.latestSentAt}</small>
+							{:else if student.gameState === 'running'}
+								<p class="empty-state">게임 진행 중...</p>
 							{:else}
 								<p class="empty-state">아직 점수가 들어오지 않았습니다.</p>
 							{/if}
 						</div>
-						{#if student.items.length}
-							<ul class="mini-list">
-								{#each student.items as item}
-									<li>
-										<span>{item.score}</span>
-										<em>{item.gameName}</em>
-									</li>
-								{/each}
-							</ul>
-						{/if}
 					</article>
 				{/each}
 			</div>
@@ -701,8 +704,7 @@
 
 	.card-head span,
 	.card-meta,
-	.card-body small,
-	.mini-list em {
+	.card-body small {
 		font-size: 0.82rem;
 		opacity: 0.8;
 	}
@@ -716,6 +718,23 @@
 		width: fit-content;
 	}
 
+	.status-chip {
+		padding: 0.35rem 0.7rem;
+		border-radius: 999px;
+		font-size: 0.78rem;
+		font-weight: 800;
+		white-space: nowrap;
+		background: rgba(255, 123, 123, 0.22);
+		color: #ffd6d6;
+		border: 1px solid rgba(255, 123, 123, 0.4);
+	}
+
+	.status-chip.on {
+		background: rgba(123, 255, 182, 0.22);
+		color: #c4ffe0;
+		border-color: rgba(123, 255, 182, 0.45);
+	}
+
 	.card-body {
 		display: grid;
 		gap: 0.35rem;
@@ -725,26 +744,6 @@
 		font-size: 1.4rem;
 		font-weight: 800;
 		margin: 0;
-	}
-
-	.mini-list {
-		list-style: none;
-		margin: 0;
-		padding: 0;
-		display: grid;
-		gap: 0.4rem;
-	}
-
-	.mini-list li {
-		display: flex;
-		justify-content: space-between;
-		gap: 0.75rem;
-		padding-top: 0.35rem;
-		border-top: 1px solid rgba(255, 255, 255, 0.12);
-	}
-
-	.mini-list span {
-		font-weight: 700;
 	}
 
 	.empty-state {

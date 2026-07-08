@@ -14,6 +14,9 @@
 
 <MakeSumGame
 	target={19}
+	targetRange={[10, 18]}
+	maxPart={9}
+	buttonMax={9}
 	title="19 만들기"
 	{runToken}
 	{gameName}
