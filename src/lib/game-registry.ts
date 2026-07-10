@@ -5,16 +5,18 @@ export const DEFAULT_GAME_NAME: GameKey = 'reaction';
 export const GAME_OPTIONS: Array<{ value: GameKey; label: string }> = [
 	{ value: 'reaction', label: '반응 속도' },
 	{ value: 'make-ten', label: '10 만들기' },
-	{ value: 'make-nineteen', label: '19 만들기' }
+	{ value: 'make-nineteen', label: '19 만들기' },
+	{ value: 'compare', label: '큰 수 작은 수' }
 ];
 
 const loaders: Record<GameKey, () => Promise<{ default: unknown }>> = {
 	reaction: () => import('./games/ReactionGame.svelte'),
 	'make-ten': () => import('./games/MakeTenGame.svelte'),
-	'make-nineteen': () => import('./games/MakeNineteenGame.svelte')
+	'make-nineteen': () => import('./games/MakeNineteenGame.svelte'),
+	compare: () => import('./games/CompareGame.svelte')
 };
 
-const VALID_KEYS = new Set<GameKey>(['reaction', 'make-ten', 'make-nineteen']);
+const VALID_KEYS = new Set<GameKey>(['reaction', 'make-ten', 'make-nineteen', 'compare']);
 
 export function normalizeGameName(value: string) {
 	const normalized = value.trim().toLowerCase().replace(/\s+/g, '-');

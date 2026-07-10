@@ -1,4 +1,4 @@
-export type GameKey = 'reaction' | 'make-ten' | 'make-nineteen';
+export type GameKey = 'reaction' | 'make-ten' | 'make-nineteen' | 'compare';
 
 export type GameControlMessage =
 	| {
